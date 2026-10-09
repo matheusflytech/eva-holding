@@ -497,7 +497,8 @@
     micBtn.addEventListener("click", toggleRecording);
 
     async function sendAudio() {
-      var blob = new Blob(audioChunks, { type: "audio/webm" });
+      // Safari grava mp4 e o Chrome webm: usa o tipo que o navegador realmente gravou.
+      var blob = new Blob(audioChunks, { type: (mediaRecorder && mediaRecorder.mimeType) || "audio/webm" });
       var reader = new FileReader();
       reader.onloadend = async function () {
         var base64 = reader.result.split(",")[1];
@@ -508,11 +509,19 @@
           var res = await fetch(WEBHOOK_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ audio_base64: base64, audio_mime: "audio/webm", conversation_id: sessionId, lang: (window.EvaI18n && window.EvaI18n.getLang()) || "pt" })
+            body: JSON.stringify({ audio_base64: base64, audio_mime: blob.type || "audio/webm", contactId: sessionId, lang: (window.EvaI18n && window.EvaI18n.getLang()) || "pt" })
           });
           var data = await res.json();
           typing.remove();
-          appendMsg(data.reply || "Desculpe, não consegui entender o áudio.", "bot");
+          var msgs = data.messages || [];
+          if (msgs.length === 0) {
+            appendMsg("Desculpe, não consegui entender o áudio.", "bot");
+          } else {
+            msgs.forEach(function (m) {
+              appendMsg(m.text, "bot");
+              if (m.options && m.options.length) renderOptionChips(m.options);
+            });
+          }
         } catch (err) {
           typing.remove();
           appendMsg("Assistente indisponível no momento. Fale com a gente por e-mail!", "bot");
